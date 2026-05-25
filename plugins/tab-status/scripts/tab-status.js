@@ -87,13 +87,12 @@ function sessionStartMessage(mode) {
 
   // fully configured: one-line reminder of what the dots mean and how to set a custom title
   if (process.env.CLAUDE_CODE_DISABLE_TERMINAL_TITLE === "1") {
-    // WT_SESSION is set by Windows Terminal (and inherited by child processes), so it's only true when hosted there
-    // ANSI SGR attributes are absolute state, not a stack: 0m resets everything to the
-    // terminal default (it does NOT restore a previous dim), so each styled span has to be
-    // closed with a reset and the next style restated explicitly.
+    // wrap the hotkey in resets (0m = terminal default) so it shows in normal-bright
+    // text against the dimmer system-message styling
     const reset = "\x1b[0m"; // reset all attributes
+    // WT_SESSION is set by Windows Terminal (and inherited by child processes), so it's only true when hosted there
     const wtTip = process.env.WT_SESSION
-      ? `\nWindows Terminal: Opens a new tab in this folder: ${reset}Ctrl+Shift+D${reset}`  // show hotkey in brighter default text color for better visibility
+      ? `\nWindows Terminal: Opens a new tab in this folder: ${reset}Ctrl+Shift+D${reset}`
       : "";
     return {
       systemMessage: `\ntab-status plugin: /rename <name> sets a custom title, /rename alone picks one for you. Takes effect next turn.${wtTip}`,
@@ -190,9 +189,12 @@ function writeTitleStatus(mode, payload) {
   const TITLE_END   = BEL;                     // OSC sequence terminator
 
   // set title to the session's /rename value if set, else the current folder name (proxy for project name)
-  const label    = readRenameTitle(payload.transcript_path) || basename(process.cwd());
-  const title    = `${dot} ${label}`;
-  const sequence = `${TITLE_START}${title}${TITLE_END}`;
+  const label     = readRenameTitle(payload.transcript_path) || basename(process.cwd());
+  // OSC strings end at BEL or ESC; strip control bytes so a /rename value or folder
+  // name can't end the title sequence early and inject its own terminal escapes.
+  const safeLabel = label.replace(/[\x00-\x1f\x7f-\x9f]/g, "");
+  const title     = `${dot} ${safeLabel}`;
+  const sequence  = `${TITLE_START}${title}${TITLE_END}`;
 
   const output = {terminalSequence: sequence};
 

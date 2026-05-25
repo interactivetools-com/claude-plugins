@@ -26,6 +26,7 @@ WSL terminals you can tell them apart at a glance.
     /plugin install tab-status@itools
     /update-config CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1   # stop Claude Code from overwriting the title
     ```
+- Then restart Claude Code (`/exit`, then relaunch) to apply the changes.
 
 ## Custom title
 

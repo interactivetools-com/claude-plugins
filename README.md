@@ -16,11 +16,13 @@ Then, inside Claude Code, add the marketplace once and install any plugin from i
 /plugin install <plugin-name>@itools
 ```
 
+Then restart Claude Code (`/exit`, then relaunch) to apply the changes.
+
 ## Available plugins
 
-| Plugin                             | What it does                                                                                                                                                             |
-|------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| [`tab-status`](plugins/tab-status) | Shows Claude's status in the terminal tab: green idle, red working, yellow when background agents are still running, plus the project folder name. e.g. [🟢 my-project ] |
+| Plugin                             | What it does                                                                                                                                                            |
+|------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| [`tab-status`](plugins/tab-status) | Shows Claude's status in the terminal tab: green idle, red working, yellow when background agents are still running, plus the project folder name. e.g. [🟢 my-project] |
 
 ## License
 
