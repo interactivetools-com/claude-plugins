@@ -1,0 +1,16 @@
+{
+  "name": "itools",
+  "owner": {
+    "name": "interactivetools.com"
+  },
+  "metadata": {
+    "description": "Claude Code plugins from interactivetools.com"
+  },
+  "plugins": [
+    {
+      "name": "tab-status",
+      "source": "./plugins/tab-status",
+      "description": "Shows Claude's status in the terminal tab: green idle, red working, yellow when background agents are still running, plus the project folder name."
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "name": "tab-status",
+  "version": "2.1.0",
+  "description": "Shows Claude's status in the terminal tab: green idle, red working, yellow when background agents are still running, plus the project folder name.",
+  "author": {
+    "name": "interactivetools.com",
+    "url": "https://interactivetools.com"
+  },
+  "homepage": "https://github.com/interactivetools-com/claude-plugins/tree/main/plugins/tab-status",
+  "repository": "https://github.com/interactivetools-com/claude-plugins",
+  "license": "MIT",
+  "keywords": [
+    "terminal",
+    "title",
+    "tab",
+    "status",
+    "hooks"
+  ]
+}
