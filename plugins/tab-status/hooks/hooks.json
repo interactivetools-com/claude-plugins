@@ -5,7 +5,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/tab-status.js\" free"
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/tab-status.js", "free"]
           }
         ]
       }
@@ -15,7 +16,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/tab-status.js\" busy"
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/tab-status.js", "busy"]
           }
         ]
       }
@@ -25,7 +27,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/tab-status.js\" check"
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/tab-status.js", "check"]
           }
         ]
       }
@@ -35,7 +38,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/tab-status.js\" check"
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/tab-status.js", "check"]
           }
         ]
       }
