@@ -1,0 +1,2 @@
+# LF line endings for every text file; git detects binary files and leaves them alone
+* text=auto eol=lf
