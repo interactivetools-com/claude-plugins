@@ -10,7 +10,7 @@
     {
       "name": "tab-status",
       "source": "./plugins/tab-status",
-      "description": "Shows Claude's status in the terminal tab: green idle, red working, yellow when background agents are still running, plus the project folder name."
+      "description": "Shows Claude's status in the terminal tab: green idle, red working, blue when Claude needs you, yellow when background agents are still running, plus the project folder name."
     }
   ]
 }

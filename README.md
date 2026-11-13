@@ -20,9 +20,9 @@ Then restart Claude Code (`/exit`, then relaunch) to apply the changes.
 
 ## Available plugins
 
-| Plugin                             | What it does                                                                                                                                                            |
-|------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| [`tab-status`](plugins/tab-status) | Shows Claude's status in the terminal tab: green idle, red working, yellow when background agents are still running, plus the project folder name. e.g. [🟢 my-project] |
+| Plugin                             | What it does                                                                                                                                                                                         |
+|------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| [`tab-status`](plugins/tab-status) | Shows Claude's status in the terminal tab: green idle, red working, blue when Claude needs you, yellow when background agents are still running, plus the project folder name. e.g. [🟢 my-project] |
 
 ## License
 

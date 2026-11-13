@@ -6,20 +6,33 @@
  *
  * Invoked by Claude Code hooks with a custom mode argument (configured in hooks.json):
  *
- *     tab-status.js free      // green  - session start; nothing running
- *     tab-status.js check     // yellow - main agent free, background work running
- *     tab-status.js busy      // red    - main agent is processing a prompt
+ *     tab-status.js free      // SessionStart                     - new session, nothing running
+ *     tab-status.js busy      // UserPromptSubmit                 - the main agent starts a turn
+ *     tab-status.js waiting   // PermissionRequest                - a permission prompt or question opens
+ *     tab-status.js tool      // PostToolUse, PostToolUseFailure  - the tool that asked has run, so its prompt was answered
+ *     tab-status.js check     // Stop, StopFailure, SubagentStop  - the main agent or a subagent finished
+ *     tab-status.js end       // SessionEnd                       - deletes the session's state file
  *
- * Every mode reads the hook payload on stdin: "check" uses Claude Code's
- * background_tasks snapshot, and all modes use transcript_path to read the session's
- * current name. Needs CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1 so Claude Code's own title
- * updates don't compete, and it only works in interactive sessions (in `claude -p`
- * there's no terminal and the sequence is dropped).
+ * The dot is the first of these that applies:
+ *
+ *     blue    // an agent has a permission prompt or question open
+ *     red     // the main agent is working on a turn
+ *     yellow  // the main agent is free, background work is still running
+ *     green   // nothing is running
+ *
+ * Each hook call is a new process, so what the earlier hooks reported is kept in a small JSON
+ * file per session (see readState). Every mode reads the hook payload on stdin: "check" uses
+ * Claude Code's background_tasks snapshot, and every mode that writes a title uses
+ * transcript_path to read the session's current name. Needs CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1
+ * so Claude Code's own title updates don't compete, and it only works in interactive sessions
+ * (in `claude -p` there's no terminal and the sequence is dropped).
  *
  * The title text is the name set with Claude Code's built-in /rename for this session,
  * or the current folder name if the session hasn't been renamed. /rename stores its value
  * in the session transcript, so it survives resume and we just read it back (see
  * readRenameTitle).
+ *
+ * Esc fires no hook, so after an interrupt the dot stays as it was until the next prompt.
  *
  * On an unexpected error this just throws. Node exits 1, which Claude Code shows
  * as a one-line "tab-status hook error" notice (full detail in the debug log) and
@@ -28,10 +41,16 @@
  * instead of silently hidden.
  */
 
-const {basename}     = require("node:path");
-const {readFileSync} = require("node:fs");
+const {basename, dirname, join}                        = require("node:path");
+const {mkdirSync, readFileSync, rmSync, writeFileSync} = require("node:fs");
 
 const isWindows = process.platform === "win32"; // true on native Windows, false in WSL
+
+// squares on native Windows, circles everywhere else (including WSL), so you can tell a Windows tab from a WSL/Linux one at a glance
+const DOT             = isWindows
+                        ? {free: "🟩", pending: "🟨", busy: "🟥", waiting: "🟦"}
+                        : {free: "🟢", pending: "🟡", busy: "🔴", waiting: "🔵"};
+const ACTIVE_STATUSES = new Set(["running", "pending"]);
 
 main();
 
@@ -39,15 +58,26 @@ main();
 
 /**
  * Entry point of the script.
- * Reads the hook payload and updates the tab status for the given mode.
+ * Reads the hook payload, works out the status for the given mode, and writes the title.
  *
  * @returns {void}
  */
 function main() {
-  const mode    = process.argv[2] ?? "free"; // custom mode argument defined in hooks.json
-  const payload = readPayload();             // hook payload on stdin: background_tasks (check) and transcript_path (all modes)
+  const mode      = process.argv[2] ?? "free"; // custom mode argument defined in hooks.json
+  const payload   = readPayload();             // hook payload on stdin
+  const stateFile = join(process.env.CLAUDE_PLUGIN_DATA, `${payload.session_id}.json`); // Claude Code sets CLAUDE_PLUGIN_DATA for plugin hooks
 
-  writeTitleStatus(mode, payload);
+  if (mode === "end") {
+    rmSync(stateFile, {force: true}); // force: no error when the session never wrote one
+    return;
+  }
+
+  const state  = readState(stateFile);
+  const status = nextStatus(mode, payload, state);
+  if (status) {
+    writeState(stateFile, state);
+  }
+  writeOutput(mode, payload, status);
 }
 
 /**
@@ -62,6 +92,111 @@ function readPayload() {
   } catch {
     return {};
   }
+}
+
+//endregion
+//region Session State
+
+/**
+ * Read what this session's earlier hooks reported.
+ *
+ *     busy       // true while the main agent is in a turn (UserPromptSubmit until Stop)
+ *     waiting    // who has a prompt open and for which tool, e.g. {main: "AskUserQuestion", a1b2c3: "Bash"}
+ *
+ * The keys of `waiting` are "main" for the main agent and the agent_id for a subagent.
+ *
+ * @param {string} stateFile - Path of the session's state file.
+ * @returns {{busy: boolean, waiting: Object<string, string>}} The saved state, or the starting state.
+ */
+function readState(stateFile) {
+  try {
+    return JSON.parse(readFileSync(stateFile, "utf8"));
+  } catch {
+    return {busy: false, waiting: {}}; // first hook of the session, or another hook is writing the file right now
+  }
+}
+
+/**
+ * Save the session's state for the next hook call.
+ *
+ * @param {string} stateFile - Path of the session's state file.
+ * @param {{busy: boolean, waiting: Object<string, string>}} state - The state to save.
+ * @returns {void}
+ */
+function writeState(stateFile, state) {
+  mkdirSync(dirname(stateFile), {recursive: true});
+  writeFileSync(stateFile, JSON.stringify(state));
+}
+
+/**
+ * Apply one hook event to the session state and pick the status to show.
+ * Changes `state` in place. Returns null when the title stays as it is; `state` is unchanged then.
+ *
+ *     nextStatus("busy", payload, state);     // "busy": state.busy is now true
+ *     nextStatus("tool", payload, state);     // null unless this agent was waiting on payload.tool_name
+ *
+ * @param {string} mode - The custom mode string (from hooks.json).
+ * @param {object} payload - The hook payload.
+ * @param {{busy: boolean, waiting: Object<string, string>}} state - The session state, updated in place.
+ * @returns {"waiting"|"busy"|"pending"|"free"|null} The status to show, or null to leave the title alone.
+ */
+function nextStatus(mode, payload, state) {
+  const agent        = payload.agent_id ?? "main";       // who the hook fired in: the main agent or a subagent
+  const tasks        = payload.background_tasks ?? [];   // only Stop and SubagentStop send this
+  let backgroundWork = false;
+
+  if (mode === "free") {
+    if (payload.source === "compact") {
+      return null; // compaction also fires SessionStart, often in the middle of a turn, and changes nothing the dot shows
+    }
+    state.busy    = false;
+    state.waiting = {};
+  }
+  else if (mode === "busy") {
+    state.busy = true;
+    delete state.waiting.main; // a new turn means the main agent's prompt is closed
+  }
+  else if (mode === "waiting") {
+    state.waiting[agent] = payload.tool_name;
+  }
+  else if (mode === "tool") {
+    // this runs after every tool call, so anything but the tool that asked exits here, before a file is read or written
+    if (state.waiting[agent] !== payload.tool_name) {
+      return null;
+    }
+    delete state.waiting[agent];
+    backgroundWork = agent !== "main"; // a subagent still running once the main agent is free is background work
+  }
+  else if (mode === "check") {
+    if (payload.hook_event_name === "SubagentStop") {
+      if (state.busy && !(agent in state.waiting)) {
+        return null; // the main agent is still in its turn, so the dot stays red
+      }
+      delete state.waiting[agent];
+    }
+    else { // Stop, StopFailure
+      state.busy = false;
+      delete state.waiting.main;
+      // an interrupted subagent never reports that its prompt closed, so drop the ones no longer listed (StopFailure sends no list)
+      if (payload.background_tasks) {
+        for (const waitingAgent of Object.keys(state.waiting)) {
+          if (!tasks.some((task) => task.id === waitingAgent)) {
+            delete state.waiting[waitingAgent];
+          }
+        }
+      }
+    }
+    // a finishing agent still lists itself as running, so exclude it or the last one to finish stays stuck on yellow
+    backgroundWork = tasks.some((task) => task.id !== payload.agent_id && ACTIVE_STATUSES.has(task.status));
+  }
+
+  if (Object.keys(state.waiting).length > 0) {
+    return "waiting";
+  }
+  if (state.busy) {
+    return "busy";
+  }
+  return backgroundWork ? "pending" : "free";
 }
 
 //endregion
@@ -154,35 +289,13 @@ function readRenameTitle(transcriptPath) {
 }
 
 /**
- * Decide the status dot based on the custom mode argument (from hooks.json) and payload, then write JSON output.
- * We return the sequence in the `terminalSequence` field on stdout for Claude Code to write.
+ * Build the terminal sequence that sets the tab title to the status dot plus the session's name.
  *
- * @param {string} mode - The custom mode string (from hooks.json).
- * @param {object} payload - The hook payload containing background task status and the session transcript path.
- * @returns {void}
+ * @param {"waiting"|"busy"|"pending"|"free"} status - The status to show.
+ * @param {object} payload - The hook payload containing the session transcript path.
+ * @returns {string} An OSC 0 title sequence.
  */
-function writeTitleStatus(mode, payload) {
-  // squares on native Windows, circles everywhere else (including WSL), so you can tell a Windows tab from a WSL/Linux one at a glance
-  const DOT             = isWindows
-                          ? {free: "🟩", pending: "🟨", busy: "🟥"}
-                          : {free: "🟢", pending: "🟡", busy: "🔴"};
-  const ACTIVE_STATUSES = new Set(["running", "pending"]);
-
-  // get the right dot for this custom mode; "check" mode checks if any other background tasks are still active
-  let dot = DOT.free;
-  if (mode === "busy") {
-    dot = DOT.busy;
-  }
-  else if (mode === "check") {
-    // agent_id is set on SubagentStop (undefined on Stop); a finishing agent still lists itself
-    // as running, so exclude it or the last one to finish stays stuck on yellow.
-    const ownAgentId = payload.agent_id;
-    const tasks      = payload.background_tasks ?? [];
-    const running    = tasks.some((task) => task.id !== ownAgentId && ACTIVE_STATUSES.has(task.status));
-    dot              = running ? DOT.pending : DOT.free;
-  }
-
-  // construct terminal sequence to set title
+function titleSequence(status, payload) {
   const ESC         = String.fromCharCode(27); // 0x1b
   const BEL         = String.fromCharCode(7);  // 0x07
   const TITLE_START = `${ESC}]0;`;             // OSC 0 sequence prefix to set window/tab title
@@ -193,10 +306,25 @@ function writeTitleStatus(mode, payload) {
   // OSC strings end at BEL or ESC; strip control bytes so a /rename value or folder
   // name can't end the title sequence early and inject its own terminal escapes.
   const safeLabel = label.replace(/[\x00-\x1f\x7f-\x9f]/g, "");
-  const title     = `${dot} ${safeLabel}`;
-  const sequence  = `${TITLE_START}${title}${TITLE_END}`;
+  const title     = `${DOT[status]} ${safeLabel}`;
 
-  const output = {terminalSequence: sequence};
+  return `${TITLE_START}${title}${TITLE_END}`;
+}
+
+/**
+ * Write the hook's JSON output: the title sequence in the `terminalSequence` field, which Claude Code
+ * writes to the terminal for us, plus the session start message. Writes nothing when there is neither.
+ *
+ * @param {string} mode - The custom mode string (from hooks.json).
+ * @param {object} payload - The hook payload containing the session transcript path.
+ * @param {"waiting"|"busy"|"pending"|"free"|null} status - The status to show, or null to leave the title alone.
+ * @returns {void}
+ */
+function writeOutput(mode, payload, status) {
+  const output = {};
+  if (status) {
+    output.terminalSequence = titleSequence(status, payload);
+  }
 
   // at session start, attach a message: when configured, a one-line summary of what the dots
   // mean; when not, a nudge plus additionalContext so Claude can offer to set the missing env var
@@ -208,7 +336,9 @@ function writeTitleStatus(mode, payload) {
     }
   }
 
-  process.stdout.write(JSON.stringify(output));
+  if (Object.keys(output).length > 0) {
+    process.stdout.write(JSON.stringify(output));
+  }
 }
 
 //endregion

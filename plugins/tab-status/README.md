@@ -1,20 +1,23 @@
 # tab-status
 
-| 🟢 example.com | 🔴 example.com | 🔴 project-plan | 🟡 acme-store | + |
+| 🟢 example.com | 🔴 example.com | 🔵 project-plan | 🟡 acme-store | + |
 |----------------|----------------|-----------------|---------------|---|
 
 Shows Claude's status in your terminal tab: a colored dot for what Claude is doing, plus the
 project folder name so you can tell tabs apart at a glance.
 
-| Tab             | State                                    |
-|-----------------|------------------------------------------|
-| 🟢 example.com  | idle, ready for input                    |
-| 🔴 example.com  | working on your prompt (another session) |
-| 🔴 project-plan | working on your prompt                   |
-| 🟡 acme-store   | background agents or tasks still running |
+| Tab             | State                                                |
+|-----------------|------------------------------------------------------|
+| 🟢 example.com  | idle, ready for input                                |
+| 🔴 example.com  | working on your prompt                               |
+| 🔵 project-plan | needs you: a permission prompt or a question is open |
+| 🟡 acme-store   | background agents or tasks still running             |
 
-On Windows (outside WSL) the dots render as squares (🟩 🟥 🟨), so when you run both Windows and
+On Windows (outside WSL) the dots render as squares (🟩 🟥 🟦 🟨), so when you run both Windows and
 WSL terminals you can tell them apart at a glance.
+
+Pressing Esc to interrupt Claude doesn't update the dot (Claude Code runs no hook for it). The dot
+is correct again after your next prompt.
 
 ## Install
 

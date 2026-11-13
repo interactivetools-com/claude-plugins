@@ -1,7 +1,7 @@
 {
   "name": "tab-status",
-  "version": "2.1.0",
-  "description": "Shows Claude's status in the terminal tab: green idle, red working, yellow when background agents are still running, plus the project folder name.",
+  "version": "2.2.0",
+  "description": "Shows Claude's status in the terminal tab: green idle, red working, blue when Claude needs you, yellow when background agents are still running, plus the project folder name.",
   "author": {
     "name": "interactivetools.com",
     "url": "https://interactivetools.com"
